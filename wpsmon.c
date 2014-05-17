@@ -33,6 +33,10 @@
 
 #include "wpsmon.h"
 
+char *REAVER_DATABASE = "reaver.db";
+char *REAVER_CONF_DIR = ".";
+int  REAVER_DEBUG = 0;
+
 int main(int argc, char *argv[])
 {
 	int c = 0;
@@ -41,7 +45,7 @@ int main(int argc, char *argv[])
 	int source = INTERFACE, ret_val = EXIT_FAILURE;
 	struct bpf_program bpf = { 0 };
 	char *out_file = NULL, *last_optarg = NULL, *target = NULL, *bssid = NULL;
-	char *short_options = "i:c:n:o:b:5sfuCDh";
+	char *short_options = "i:c:n:o:y:z:r:5sfuCDhv";
         struct option long_options[] = {
 		{ "bssid", required_argument, NULL, 'b' },
                 { "interface", required_argument, NULL, 'i' },
@@ -55,6 +59,9 @@ int main(int argc, char *argv[])
 		{ "scan", no_argument, NULL, 's' },
 		{ "survey", no_argument, NULL, 'u' },
                 { "help", no_argument, NULL, 'h' },
+                { "verbose", no_argument, NULL, 'v' },
+		{ "conf-dir", no_argument, NULL, 'y' },
+		{ "database", no_argument, NULL, 'z' },
                 { 0, 0, 0, 0 }
         };
 
@@ -62,8 +69,6 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Copyright (c) 2011, Tactical Network Solutions, Craig Heffner <cheffner@tacnetsol.com>\n\n");
 
 	globule_init();
-	sql_init();
-	create_ap_table();
 	set_auto_channel_select(0);
 	set_wifi_band(BG_BAND);
 	set_debug(INFO);
@@ -109,6 +114,16 @@ int main(int argc, char *argv[])
 			case 'D':
 				daemonize();
 				break;
+			case 'v':
+				set_debug(VERBOSE);
+				REAVER_DEBUG = 1;
+				break;
+			case 'y':
+				REAVER_CONF_DIR = strdup(optarg);
+				break;
+			case 'z':
+				REAVER_DATABASE = strdup(optarg);
+				break;
 			default:
 				usage(argv[0]);
 				goto end;
@@ -125,6 +140,10 @@ int main(int argc, char *argv[])
 			last_optarg = strdup(optarg);
 		}
 	}
+
+
+	sql_init();
+	create_ap_table();
 
 	/* The interface value won't be set if capture files were specified; else, there should have been an interface specified */
 	if(!get_iface() && source != PCAP_FILE)
@@ -234,10 +253,15 @@ void monitor(char *bssid, int passive, int source, int channel, int mode)
 	struct itimerval timer;
 	struct pcap_pkthdr header;
 	static int header_printed;
-        const u_char *packet = NULL;
+	const u_char *packet = NULL;
 
-        memset(&act, 0, sizeof(struct sigaction));
-        memset(&timer, 0, sizeof(struct itimerval));
+	struct sigevent sev;
+	struct itimerspec its;
+	sigset_t mask;
+	timer_t timerid;
+
+	memset(&act, 0, sizeof(struct sigaction));
+	memset(&timer, 0, sizeof(struct itimerval));
 
 	/* If we aren't reading from a pcap file, set the interface channel */
 	if(source == INTERFACE)
@@ -253,9 +277,29 @@ void monitor(char *bssid, int passive, int source, int channel, int mode)
 		}
 		else
 		{
-        		act.sa_handler = sigalrm_handler;
-        		sigaction (SIGALRM, &act, 0);
+#ifndef NO_UALARM
+        	act.sa_handler = sigalrm_handler;
+        	sigaction (SIGALRM, &act, 0);
 			ualarm(CHANNEL_INTERVAL, CHANNEL_INTERVAL);
+#else
+        	// Define sigaction: handler
+        	act.sa_flags = SA_SIGINFO;
+        	act.sa_sigaction = channel_timer_handler;
+        	sigemptyset(&act.sa_mask);
+        	sigaction(SIGUSR1, &act, NULL);
+        		
+        	// Define sigevent
+        	sev.sigev_notify = SIGEV_SIGNAL;
+        	sev.sigev_signo = SIGUSR1;
+        		
+        	// Create the timer
+        	timer_create(CLOCK_REALTIME, &sev, &timerid);
+        	its.it_value.tv_sec = 1;
+        	its.it_value.tv_nsec = 0;
+        	its.it_interval.tv_sec = its.it_value.tv_sec;
+        	its.it_interval.tv_nsec = its.it_value.tv_nsec;
+        	timer_settime(timerid, 0, &its, NULL);
+#endif
 			change_channel(1);
 		}
 	}
@@ -269,14 +313,14 @@ void monitor(char *bssid, int passive, int source, int channel, int mode)
 
 	while((packet = next_packet(&header)))
 	{
-		parse_wps_settings(packet, &header, bssid, passive, mode, source);
+		parse_wps_settings(packet, &header, bssid, passive, mode, source, &timerid);
 		memset((void *) packet, 0, header.len);
 	}
 
 	return;
 }
 
-void parse_wps_settings(const u_char *packet, struct pcap_pkthdr *header, char *target, int passive, int mode, int source)
+void parse_wps_settings(const u_char *packet, struct pcap_pkthdr *header, char *target, int passive, int mode, int source, timer_t *timerid)
 {
 	struct radio_tap_header *rt_header = NULL;
 	struct dot11_frame_header *frame_header = NULL;
@@ -306,6 +350,7 @@ void parse_wps_settings(const u_char *packet, struct pcap_pkthdr *header, char *
 	set_ssid(NULL);
 	bssid = (char *) mac2str(frame_header->addr3, ':');
 	set_bssid((unsigned char *) frame_header->addr3);
+	//fprintf(stderr, "Parsing %d\n",__LINE__);
 
 	if(bssid)
 	{
@@ -318,7 +363,11 @@ void parse_wps_settings(const u_char *packet, struct pcap_pkthdr *header, char *
 
 			if(target != NULL && channel_changed == 0)
 			{
+#ifndef NO_UALARM
 				ualarm(0, 0);
+#else
+				timer_delete(*timerid);
+#endif
 				change_channel(channel);
 				channel_changed = 1;
 			}
@@ -359,6 +408,9 @@ void parse_wps_settings(const u_char *packet, struct pcap_pkthdr *header, char *
 
 					cprintf(INFO, "%17s      %2d            %.2d        %d.%d               %s               %s\n", bssid, channel, rssi, (wps->version >> 4), (wps->version & 0x0F), lock_display, ssid);
 				}
+
+				if(REAVER_DEBUG)
+					cprintf(INFO, "%17s      %2d            %.2d        %d.%d               ??               %s\n", bssid, channel, rssi, (wps->version >> 4), (wps->version & 0x0F), ssid);
 
 				if(probe_sent)
 				{
@@ -416,6 +468,11 @@ void sigalrm_handler(int x)
 	next_channel();
 }
 
+static void channel_timer_handler(int sig, siginfo_t *si, void *uc)
+{
+        next_channel();
+}
+
 void usage(char *prog)
 {
 	fprintf(stderr, "Required Arguments:\n");
@@ -431,6 +488,9 @@ void usage(char *prog)
 	fprintf(stderr, "\t-5, --5ghz                           Use 5GHz 802.11 channels\n");
 	fprintf(stderr, "\t-s, --scan                           Use scan mode\n");
 	fprintf(stderr, "\t-u, --survey                         Use survey mode [default]\n");
+	fprintf(stderr, "\t-v, --verbose                        Verbose + (Android) Debug SQL errors to logcat\n");
+	fprintf(stderr, "\t-y, --conf-dir=<dir>                 Use <dir> as the conf directory (currently \"%s\")\n", REAVER_CONF_DIR);
+	fprintf(stderr, "\t-z, --database=<file>                Use <file> as the database (currently \"%s\")\n", REAVER_DATABASE);
 	fprintf(stderr, "\t-h, --help                           Show help\n");
 	
 	fprintf(stderr, "\nExample:\n");

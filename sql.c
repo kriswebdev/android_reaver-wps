@@ -33,6 +33,7 @@
 
 #include "sql.h"
 
+
 sqlite3 *db = NULL;
 
 int sql_init(void)
@@ -231,16 +232,23 @@ int update(char *bssid, char *essid, struct libwps_data *wps, int encryption)
 int sql_exec(char *query)
 {
 	int result = SQLITE_ERROR;
+    char *zErrMsg = 0;
 
 	if(query)
 	{
 		do
 		{
-			result = sqlite3_exec(db, query, NULL, NULL, NULL);
+			result = sqlite3_exec(db, query, NULL, NULL, &zErrMsg);
 			usleep(BUSY_WAIT_PERIOD);
 		} 
 		while(result == SQLITE_BUSY);
 	}
+#ifdef ANDROID
+    if (result != SQLITE_OK && REAVER_DEBUG) {
+        __android_log_print(ANDROID_LOG_INFO, "REAVER", "SQLite error code = %d, %s", errno, zErrMsg);
+        sqlite3_free(zErrMsg);
+        }
+#endif
 
 	return result;
 }
@@ -410,3 +418,4 @@ void sql_cleanup(void)
 	sqlite3_close(db);
 	db = NULL;
 }
+

@@ -41,7 +41,7 @@ int process_arguments(int argc, char **argv)
 	int long_opt_index = 0;
 	char bssid[MAC_ADDR_LEN] = { 0 };
 	char mac[MAC_ADDR_LEN] = { 0 };
-	char *short_options = "b:e:m:i:t:d:c:T:x:r:g:l:o:p:s:C:aA5ELfnqvDShwN";
+	char *short_options = "b:e:m:i:t:d:c:T:x:r:g:l:o:p:s:C:y:z:aA5ELfnqvDShwN";
 	struct option long_options[] = {
 		{ "interface", required_argument, NULL, 'i' },
 		{ "bssid", required_argument, NULL, 'b' },
@@ -73,6 +73,8 @@ int process_arguments(int argc, char **argv)
 		{ "verbose", no_argument, NULL, 'v' },
 		{ "win7", no_argument, NULL, 'w' },
 		{ "help", no_argument, NULL, 'h' },
+		{ "conf-dir", no_argument, NULL, 'y' },
+		{ "database", no_argument, NULL, 'z' },
 		{ 0, 0, 0, 0 }
 	};
 
@@ -163,6 +165,7 @@ int process_arguments(int argc, char **argv)
                                 break;
                         case 'v':
                                 set_debug(get_debug() + 1);
+				REAVER_DEBUG = 1;
                                 break;
                         case 'q':
                                 set_debug(CRITICAL);
@@ -172,6 +175,12 @@ int process_arguments(int argc, char **argv)
 				break;
 			case 'N':
 				set_oo_send_nack(0);
+				break;
+			case 'y':
+				REAVER_CONF_DIR = strdup(optarg);
+				break;
+			case 'z':
+				REAVER_DATABASE = strdup(optarg);
 				break;
                         default:
                                 ret_val = EXIT_FAILURE;

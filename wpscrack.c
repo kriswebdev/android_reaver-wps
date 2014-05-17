@@ -33,6 +33,10 @@
 
 #include "wpscrack.h"
 
+char *REAVER_DATABASE = "reaver.db";
+char *REAVER_CONF_DIR = ".";
+int  REAVER_DEBUG = 0;
+
 int main(int argc, char **argv)
 {
 	int ret_val = EXIT_FAILURE, r = 0;
@@ -40,7 +44,6 @@ int main(int argc, char **argv)
 	struct wps_data *wps = NULL;
 
 	globule_init();
-	sql_init();
 	init_default_settings();
 
 	fprintf(stderr, "\nReaver v%s WiFi Protected Setup Attack Tool\n", PACKAGE_VERSION);
@@ -58,6 +61,8 @@ int main(int argc, char **argv)
 		ret_val = usage(argv[0]);
 		goto end;
 	}
+
+	sql_init();
 
 	/* Double check usage */
 	if(!get_iface() || (memcmp(get_bssid(), NULL_MAC, MAC_ADDR_LEN) == 0))
@@ -176,6 +181,8 @@ int usage(char *prog_name)
         fprintf(stderr, "\t-E, --eap-terminate             Terminate each WPS session with an EAP FAIL packet\n");
         fprintf(stderr, "\t-n, --nack                      Target AP always sends a NACK [Auto]\n");
 	fprintf(stderr, "\t-w, --win7                      Mimic a Windows 7 registrar [False]\n");
+	fprintf(stderr, "\t-y, --conf-dir=<dir>            Use <dir> as the conf directory (currently \"%s\")\n", REAVER_CONF_DIR);
+	fprintf(stderr, "\t-z, --database=<file>           Use <file> as the database (currently \"%s\")\n", REAVER_DATABASE);
 
         fprintf(stderr, "\nExample:\n\t%s -i mon0 -b 00:90:4C:C1:AC:21 -vv\n\n", prog_name);
 

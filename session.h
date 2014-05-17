@@ -42,10 +42,6 @@
 #include "sql.h"
 #include "config.h"
 
-#ifndef CONF_DIR
-#define CONF_DIR	"/etc/reaver"
-#endif
-
 #define MAX_LINE_SIZE	128
 #define CONF_EXT	"wpc"
 
@@ -54,8 +50,11 @@
 #define P1_READ_LEN     (P1_STR_LEN + 2)        /* Read lengths == (strlen + new line + null byte) */
 #define P2_READ_LEN     (P2_STR_LEN + 2)
 
+extern char *REAVER_CONF_DIR;
 int restore_session();
 int save_session();
 int configuration_directory_exists();
 
+
 #endif
+

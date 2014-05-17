@@ -39,6 +39,12 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <libwps.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <signal.h>
+#include <time.h>
+
 #include "defs.h"
 #include "globule.h"
 #include "misc.h"
@@ -98,11 +104,12 @@ struct global_variables
 } wpsmon;
 
 void monitor(char *bssid, int passive, int source, int channel, int mode);
-void parse_wps_settings(const u_char *packet, struct pcap_pkthdr *header, char *target, int passive, int mode, int source);
+void parse_wps_settings(const u_char *packet, struct pcap_pkthdr *header, char *target, int passive, int mode, int source, timer_t *timerid);
 void send_probe_request(unsigned char *bssid, char *essid);
 int is_dup(unsigned char *bssid);
 void mark_bssid(unsigned char *bssid);
 void free_bssid_list(unsigned char **list, int count);
+static void channel_timer_handler(int sig, siginfo_t *si, void *uc);
 void sigalrm_handler(int x);
 void usage(char *prog);
 

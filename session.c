@@ -62,7 +62,7 @@ int restore_session()
 		memset(file, 0, FILENAME_MAX);
 
 		bssid = mac2str(get_bssid(), '\0');
-		snprintf(file, FILENAME_MAX, "%s/%s.%s", CONF_DIR, bssid, CONF_EXT);
+		snprintf(file, FILENAME_MAX, "%s/%s.%s", REAVER_CONF_DIR, bssid, CONF_EXT);
 		free(bssid);
 	}
 
@@ -205,7 +205,7 @@ int save_session()
 			 */
 			if(configuration_directory_exists())
 			{
-        			snprintf((char *) &file_name, FILENAME_MAX, "%s/%s.%s", CONF_DIR, bssid, CONF_EXT);
+        			snprintf((char *) &file_name, FILENAME_MAX, "%s/%s.%s", REAVER_CONF_DIR, bssid, CONF_EXT);
 			}
 			else
 			{
@@ -303,10 +303,11 @@ int configuration_directory_exists()
 	struct stat dirstat = { 0 };
 	int retval = 0;
 
-	if(stat(CONF_DIR, &dirstat) == 0)
+	if(stat(REAVER_CONF_DIR, &dirstat) == 0)
 	{
 		retval = 1;
 	}
 
 	return retval;
 }
+
